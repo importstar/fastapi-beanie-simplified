@@ -5,7 +5,7 @@ Auth use case - handles authentication logic
 import datetime
 
 from fastapi import HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordRequestForm
 
 from ..user.model import User
 from ...core import security
@@ -89,13 +89,11 @@ class AuthUseCase:
 
     async def refresh_token(
         self,
-        credentials: HTTPAuthorizationCredentials,
+        token: str,
     ) -> schemas.GetAccessTokenResponse:
         """Refresh access token using refresh token"""
         try:
-            new_access_token = security.jwt_handler.refresh_token(
-                credentials.credentials
-            )
+            new_access_token = security.jwt_handler.refresh_token(token)
             return schemas.GetAccessTokenResponse(
                 access_token=new_access_token, token_type="bearer"
             )
@@ -106,7 +104,6 @@ class AuthUseCase:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Token refresh failed: {e}",
             )
-
 
     async def logout(self) -> None:
         """Logout user (this project use JWT that is stateless, revoking token will be done by delete from client)"""

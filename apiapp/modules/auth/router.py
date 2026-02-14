@@ -5,7 +5,15 @@ Auth API router - authentication endpoints
 import typing
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Response, Security
+from fastapi import (
+    APIRouter,
+    Depends,
+    Response,
+    Security,
+    Cookie,
+    HTTPException,
+    status,
+)
 from fastapi.security import (
     HTTPAuthorizationCredentials,
     HTTPBearer,
@@ -15,6 +23,7 @@ from fastapi.security import (
 from .use_case import AuthUseCase, get_auth_use_case
 from . import schemas
 from .schemas import Platform
+from ...core.config import settings
 
 
 router = APIRouter(prefix="/v1/auth", tags=["Authentication"])
@@ -42,8 +51,12 @@ async def login(
             key="refresh_token",
             value=token.refresh_token,
             httponly=True,
-            samesite="strict",
-            secure=True,  # Recommended for production
+            # Dev: Lax (HTTP Friendly) | Prod: Strict
+            samesite="strict" if settings.APP_ENV == "prod" else "lax",
+            # Dev: False (HTTP Friendly) | Prod: True
+            secure=settings.APP_ENV == "prod",
+            # Persist for 30 days
+            max_age=settings.REFRESH_TOKEN_EXPIRE_MINUTES * 60,
         )
         # Hide refresh token from the response body
         token.refresh_token = None
@@ -61,16 +74,29 @@ async def logout(
     response.delete_cookie(
         key="refresh_token",
         httponly=True,
-        samesite="strict",
-        secure=True,  # Recommended for production
+        samesite="strict" if settings.APP_ENV == "prod" else "lax",
+        secure=settings.APP_ENV == "prod",
     )
     return schemas.Message(detail="Successfully logged out")
 
 
 @router.get("/refresh_token")
 async def refresh_token(
-    credentials: Annotated[HTTPAuthorizationCredentials, Security(HTTPBearer())],
+    response: Response,
+    refresh_token: Annotated[str | None, Cookie()] = None,
+    credentials: Annotated[
+        HTTPAuthorizationCredentials | None, Security(HTTPBearer(auto_error=False))
+    ] = None,
     use_case: AuthUseCase = Depends(get_auth_use_case),
 ) -> schemas.GetAccessTokenResponse:
     """Refresh access token using refresh token."""
-    return await use_case.refresh_token(credentials)
+    token = refresh_token or (credentials.credentials if credentials else None)
+
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token missing",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    return await use_case.refresh_token(token)
