@@ -2,12 +2,13 @@
 Pet Beanie document model
 """
 
-from beanie import Document, Indexed
+from beanie import Document, Indexed, Link
 from pydantic import Field
 from typing import Optional
 from datetime import UTC, datetime
 from .schemas import BasePet
 from ...core.base_schemas import TimestampMixin
+from ..user.model import User
 
 
 class Pet(BasePet, TimestampMixin, Document):
@@ -18,6 +19,7 @@ class Pet(BasePet, TimestampMixin, Document):
     # Add indexed fields here if needed
     # example: name: Annotated[str, Indexed(unique=True)]
 
+    owner: Link[User]
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: Optional[datetime] = None
 
