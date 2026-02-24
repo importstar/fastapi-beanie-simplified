@@ -19,6 +19,9 @@ class BasePet(BaseModel):
     description: Optional[str] = Field(
         default=None, max_length=500, description="Description of the pet"
     )
+    image_id: Optional[PydanticObjectId] = Field(
+        default=None, description="GridFS ID of the pet image"
+    )
     is_active: bool = Field(default=True, description="Indicates if the pet is active")
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -114,6 +117,7 @@ class PetListProjection(BaseSchema, BasePet):
         projection = {
             "name": 1,
             "description": 1,
+            "image_id": 1,
             "is_active": 1,
             "created_at": 1,
             "owner_id": "$owner.$id"  # <-- ดึงแค่ ID ของ Link แบบตรงๆ แทนที่จะใช้ fetch_links=True!

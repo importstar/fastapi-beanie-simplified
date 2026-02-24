@@ -2,7 +2,8 @@
 Pet API router - REST endpoints
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi.responses import StreamingResponse
 from fastapi_pagination import Page, Params
 
 from .use_case import PetUseCase, get_pet_use_case
@@ -69,3 +70,31 @@ async def delete_pet(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Pet not found"
         )
+
+
+@router.post("/{entity_id}/image", response_model=PetResponse)
+async def upload_pet_image(
+    entity_id: str,
+    file: UploadFile = File(...),
+    use_case: PetUseCase = Depends(get_pet_use_case),
+):
+    """Upload pet image."""
+    return await use_case.upload_image(entity_id, file)
+
+
+@router.get("/{entity_id}/image", response_class=StreamingResponse)
+async def get_pet_image(
+    entity_id: str,
+    use_case: PetUseCase = Depends(get_pet_use_case),
+):
+    """Get pet image."""
+    return await use_case.get_image(entity_id)
+
+
+@router.delete("/{entity_id}/image", response_model=PetResponse)
+async def delete_pet_image(
+    entity_id: str,
+    use_case: PetUseCase = Depends(get_pet_use_case),
+):
+    """Delete pet image."""
+    return await use_case.delete_image(entity_id)

@@ -3,7 +3,8 @@ Pet use case - business logic and data access
 Simplified pattern using Beanie's built-in methods directly
 """
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status, UploadFile
+from fastapi.responses import StreamingResponse
 from fastapi_pagination import Page
 from fastapi_pagination.ext.beanie import paginate
 from beanie import PydanticObjectId
@@ -12,6 +13,7 @@ from .model import Pet
 from .schemas import CreatePet, UpdatePet, PetResponse, PetListProjection
 from ...core.base_use_case import BaseUseCase
 from ..user.model import User
+from ...infrastructure.gridfs import File
 
 
 class PetUseCase(BaseUseCase[Pet, CreatePet, UpdatePet, PetResponse]):
@@ -100,6 +102,79 @@ class PetUseCase(BaseUseCase[Pet, CreatePet, UpdatePet, PetResponse]):
             size=page.size,
             pages=page.pages,
         )
+
+
+    # ==================== Image Management ====================
+    async def upload_image(self, entity_id: str, file: UploadFile) -> PetResponse:
+        """Upload and link an image to a pet."""
+        pet = await self.model.get(PydanticObjectId(entity_id))
+        if not pet:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Pet not found"
+            )
+
+        if pet.image_id:
+            try:
+                old_file = File(collection_name="pets", file_id=pet.image_id)
+                await old_file.delete()
+            except Exception:
+                pass
+
+        new_file = File(collection_name="pets")
+        file_id = await new_file.put(file)
+
+        pet.image_id = file_id
+        await pet.save()
+
+        return self._to_response(pet)
+
+    async def get_image(self, entity_id: str) -> StreamingResponse:
+        """Get pet image stream."""
+        pet = await self.model.get(PydanticObjectId(entity_id))
+        if not pet or not pet.image_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Image not found"
+            )
+
+        try:
+            grid_file = File(collection_name="pets", file_id=pet.image_id)
+            grid_out = await grid_file.get()
+            
+            async def file_iterator():
+                while True:
+                    chunk = await grid_out.readchunk()
+                    if not chunk:
+                        break
+                    yield chunk
+
+            content_type = "application/octet-stream"
+            if grid_out.metadata and "content_type" in grid_out.metadata:
+                content_type = grid_out.metadata["content_type"]
+
+            return StreamingResponse(file_iterator(), media_type=content_type)
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Image not found in GridFS"
+            )
+
+    async def delete_image(self, entity_id: str) -> PetResponse:
+        """Delete pet image."""
+        pet = await self.model.get(PydanticObjectId(entity_id))
+        if not pet or not pet.image_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Image not found"
+            )
+
+        try:
+            grid_file = File(collection_name="pets", file_id=pet.image_id)
+            await grid_file.delete()
+        except Exception:
+            pass
+
+        pet.image_id = None
+        await pet.save()
+
+        return self._to_response(pet)
 
 
 # Dependency injection

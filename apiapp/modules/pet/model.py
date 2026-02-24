@@ -2,7 +2,7 @@
 Pet Beanie document model
 """
 
-from beanie import Document, Indexed, Link
+from beanie import Document, Indexed, Link, PydanticObjectId
 from pydantic import Field
 from typing import Optional
 from datetime import UTC, datetime
@@ -20,6 +20,7 @@ class Pet(BasePet, TimestampMixin, Document):
     # example: name: Annotated[str, Indexed(unique=True)]
 
     owner: Link[User]
+    image_id: Optional[PydanticObjectId] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: Optional[datetime] = None
 
