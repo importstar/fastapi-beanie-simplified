@@ -45,10 +45,7 @@ class Settings(BaseSettings):
     ALLOW_HEADERS: List[str] = ["*"]
     DISALLOW_AGENTS: List[str] = [
         "zgrab",
-        "curl",
         "wget",
-        "postmanruntime",
-        "python-requests",
     ]
 
     LOGGING_LEVEL: int = logging.INFO

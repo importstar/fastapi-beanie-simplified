@@ -1,5 +1,5 @@
 """
-Velo CLI - FastAPI Module Generator and Development Tools
+Forge CLI - FastAPI Module Generator and Development Tools
 """
 
 import typer
@@ -89,7 +89,7 @@ def generate(
     - Use case with business logic
     - FastAPI router with REST endpoints
 
-    Example: velo product
+    Example: forge generate product
     """
     # Convert name to snake_case and PascalCase
     snake_case = name.lower().replace("-", "_")

@@ -1,6 +1,6 @@
-# Velo CLI Tool
+# Forge CLI Tool
 
-Velo is a command-line tool for generating FastAPI modules with CRUD operations in the FastAPI-Beanie starter template.
+Forge is a command-line tool for generating FastAPI modules with CRUD operations in the FastAPI-Beanie starter template.
 
 ## Installation
 
@@ -15,19 +15,19 @@ poetry install
 ### Generate a new module
 
 ```bash
-velo generate <module-name>
+forge generate <module-name>
 ```
 
 Example:
 
 ```bash
-velo generate product
+forge generate product
 ```
 
 ### Start development server
 
 ```bash
-velo dev
+forge dev
 ```
 
 This runs the FastAPI development server with hot reload.
@@ -86,13 +86,13 @@ The generated files are templates that you can customize according to your needs
 Generate multiple modules:
 
 ```bash
-velo generate category
-velo generate order
-velo generate inventory
+forge generate category
+forge generate order
+forge generate inventory
 ```
 
 Start development:
 
 ```bash
-velo dev
+forge dev
 ```

@@ -499,6 +499,21 @@ async def create_item():
 - **Router prefixes**: `/v1/{feature}` (lowercase, plural if applicable)
 - **Router tags**: `["{Feature}"]` (PascalCase, singular)
 
+## 🚀 Running The App
+
+Always run the app using the provided scripts after activating your virtual environment.
+
+```bash
+# 1. Activate Virtual Environment
+source venv/bin/activate
+
+# 2. Run in Development Mode
+./scripts/run-dev
+
+# 3. Run in Production Mode
+./scripts/run-prod
+```
+
 ## 🎯 When Creating New Features
 
 ### **Option 1: Using CLI Tools (Recommended)**
@@ -506,20 +521,11 @@ async def create_item():
 The project includes a powerful CLI module generator:
 
 ```bash
-# Interactive mode - will prompt for module name and features
-poetry run forge module create
-
 # Direct creation with module name
-poetry run forge module create {feature_name}
+poetry run forge generate {feature_name}
 
 # Force overwrite existing files
-poetry run forge module create {feature_name} --force
-
-# Dry run to see what files will be created
-poetry run forge module create {feature_name} --dry-run
-
-# List existing modules
-poetry run forge module list
+poetry run forge generate {feature_name} --overwrite
 ```
 
 The CLI will automatically generate:

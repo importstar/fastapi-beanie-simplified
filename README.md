@@ -154,6 +154,15 @@ modules/{feature}/
 2. **ติดตั้ง Dependencies ด้วย Poetry**
 
    ```bash
+   # สร้าง Virtual Environment
+   python -m venv venv
+   
+   # Activate Virtual Environment
+   # สำหรับ Linux/Mac:
+   source venv/bin/activate
+   # สำหรับ Windows:
+   # venv\Scripts\activate
+
    # ติดตั้ง Poetry (ถ้ายังไม่มี)
    curl -sSL https://install.python-poetry.org | python3 -
 
@@ -164,8 +173,8 @@ modules/{feature}/
 3. **ตั้งค่า Environment Variables**
 
    ```bash
-   # คัดลอกไฟล์ .env.example
-   cp .env.example .env
+   # คัดลอกไฟล์ .env.sample
+   cp .env.sample .env
 
    # แก้ไขไฟล์ .env ตามการตั้งค่าของคุณ
    nano .env
@@ -189,19 +198,18 @@ modules/{feature}/
 4. **รันแอปพลิเคชัน**
 
    ```bash
-   # โหมด Development (ใหม่ - ใช้ CLI)
-   poetry run forge app run dev
+   # ต้องมั่นใจว่า Activate venv แล้ว (source venv/bin/activate)
    
-   # โหมด Production (ใหม่ - ใช้ CLI)
-   poetry run forge app run prod
+   # โหมด Development (auto-reload)
+   ./scripts/run-dev
    
-   # หรือใช้วิธีเดิม
-   poetry run python apiapp/run.py
+   # โหมด Production
+   ./scripts/run-prod
    ```
 
 5. **เข้าถึง API Documentation**
-   - Swagger UI: http://localhost:8000/docs
-   - ReDoc: http://localhost:8000/redoc
+   - Swagger UI: http://localhost:9000/docs
+   - ReDoc: http://localhost:9000/redoc
 
 ### 🎯 Quick Start - สร้าง API แรกของคุณ
 
@@ -209,10 +217,10 @@ modules/{feature}/
 
    ```bash
    # สร้าง products module แบบ interactive
-   poetry run forge module create
+   poetry run forge generate products
 
    # หรือสร้างโดยระบุชื่อ
-   poetry run forge module create products
+   poetry run forge generate products
    ```
 
    - `modules/products/schemas.py` - กำหนดรูปแบบข้อมูล
@@ -272,24 +280,14 @@ GET /v1/health
 เครื่องมือ CLI ที่ทรงพลังสำหรับสร้าง FastAPI modules ใหม่ตามโครงสร้าง Clean Architecture:
 
 ```bash
-# สร้าง module ใหม่ (Interactive mode)
-poetry run forge module create
-
-# สร้าง module โดยระบุชื่อ
-poetry run forge module create products
+# สร้าง module ใหม่ 
+poetry run forge generate products
 
 # สร้างแบบ force overwrite
-poetry run forge module create products --force
-
-# ดูว่าจะสร้างไฟล์อะไรบ้าง (Dry run)
-poetry run forge module create products --dry-run
-
-# ดู modules ที่มีอยู่
-poetry run forge module list
+poetry run forge generate products --overwrite
 
 # ดู help
 poetry run forge --help
-poetry run forge module --help
 ```
 
 **คุณสมบัติของ CLI:**
@@ -303,31 +301,12 @@ poetry run forge module --help
 
 รายละเอียดเพิ่มเติม: [cli/README.md](cli/README.md)
 
-### 🔧 CLI Commands (แนะนำ - ใหม่!)
+### 🔧 Development Scripts (แนะนำสำหรับการรันเซิร์ฟเวอร์)
 
 ```bash
-# รันในโหมด Development (auto-reload)
-poetry run forge app run dev
+# ต้องมั่นใจว่า Activate venv แล้ว
+# source venv/bin/activate
 
-# รันในโหมด Production  
-poetry run forge app run prod
-
-# สร้าง Admin User แรก
-poetry run forge admin create
-
-# สร้าง Module ใหม่
-poetry run forge module create products
-
-# ดู Modules ที่มีอยู่
-poetry run forge module list
-
-# ดู Help
-poetry run forge --help
-```
-
-### 🔧 Development Scripts (วิธีเดิม - ยังใช้ได้)
-
-```bash
 # รันในโหมด Development (auto-reload)
 ./scripts/run-dev
 
@@ -338,7 +317,7 @@ poetry run forge --help
 ./scripts/init-admin
 ```
 
-> 💡 **แนะนำ**: ใช้ CLI commands (`poetry run forge`) แทน scripts เพื่อประสบการณ์ที่ดีกว่าและมี features เพิ่มเติม
+> 💡 **แนะนำ**: ใช้ Shell Scripts (`./scripts/run-dev`) เป็นหลักในการรันระบบ แทนการกระโดดผ่าน `poetry` รัน เพื่อความเสถียรของ Environment
 
 ## 📚 คู่มือการพัฒนา
 
@@ -424,7 +403,7 @@ poetry run pytest-watch
 docker build -t fastapi-app .
 
 # Run container
-docker run -p 8000:8000 fastapi-app
+docker run -p 9000:9000 fastapi-app
 ```
 
 ### ☁️ Cloud Deployment

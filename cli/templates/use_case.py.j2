@@ -6,6 +6,7 @@ Simplified pattern using BaseUseCase for common CRUD operations
 from .model import {{ pascal_case }}
 from .schemas import Create{{ pascal_case }}, Update{{ pascal_case }}, {{ pascal_case }}Response
 from ...core.base_use_case import BaseUseCase
+from fastapi_pagination import Page
 
 
 class {{ pascal_case }}UseCase(BaseUseCase[{{ pascal_case }}, Create{{ pascal_case }}, Update{{ pascal_case }}, {{ pascal_case }}Response]):
