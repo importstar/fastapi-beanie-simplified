@@ -10,9 +10,8 @@ This project follows **Clean Architecture** principles with **Domain-Driven Desi
 apiapp/
 ├── core/                    # Business Logic & Shared Components Layer
 │   ├── __init__.py
-│   ├── base_repository.py   # Base repository pattern
 │   ├── base_schemas.py      # Base Pydantic schemas
-│   ├── base_use_case.py     # Base use case pattern
+│   ├── base_use_case.py     # Base use case pattern (CRUD & DB access)
 │   ├── config.py            # App configuration & settings
 │   ├── exceptions.py        # Custom business exceptions
 │   ├── http_error.py        # HTTP error handling
@@ -47,10 +46,9 @@ apiapp/
     ├── user/                # User management module
     │   ├── __init__.py
     │   ├── model.py         # User database model
-    │   ├── repository.py    # User data access layer
     │   ├── router.py        # User API endpoints
     │   ├── schemas.py       # User schemas
-    │   └── use_case.py      # User business logic
+    │   └── use_case.py      # User business logic & data access
     ├── health/              # Health check module
     │   ├── __init__.py
     │   ├── router.py        # Health check endpoints
@@ -76,17 +74,16 @@ modules/{feature}/
 ├── __init__.py
 ├── model.py        # Database Model (Beanie Document)
 ├── schemas.py      # Pydantic schemas (DTOs)
-├── repository.py   # Data access layer
-├── use_case.py     # Business logic layer (with dependency providers)
+├── use_case.py     # Business logic & Database Access
 └── router.py       # API endpoints
 ```
 
 ### 3. **Dependency Injection Pattern**
 
 - Use FastAPI's `Depends()` for ALL dependencies
-- Create dependency providers in `core/dependencies/`
-- Inject use cases, repositories, and services through dependencies
-- NO direct instantiation in routers
+- Create shared dependency providers in `core/dependencies/`
+- Inject use cases and services through dependencies
+- NO direct model querying in routers
 
 ## 📋 Coding Patterns & Guidelines
 
@@ -136,77 +133,41 @@ class {Model}(Document):
         ]
 ```
 
-### **2. Use Case Pattern**
+### **2. Use Case Pattern (Business Logic + Data Access)**
 
 ```python
 # modules/{feature}/use_case.py
 from fastapi import Depends
 from typing import Optional
+from beanie import PydanticObjectId
 
-from apiapp.core.base_repository import BaseRepository
+from apiapp.core.base_use_case import BaseUseCase
 from .model import {Model}
-from .repository import {Feature}Repository
+from .schemas import Create{Model}, Update{Model}, {Model}Response
 
-class {Feature}UseCase:
-    def __init__(
-        self,
-        {feature}_repository: {Feature}Repository,
-        other_service: Optional[SomeService] = None
-    ):
-        self.{feature}_repository = {feature}_repository
-        self.other_service = other_service
+class {Feature}UseCase(BaseUseCase[{Model}, Create{Model}, Update{Model}, {Model}Response]):
+    model = {Model}
+    response_schema = {Model}Response
 
-    async def {action}(self, data: {Schema}) -> {ReturnType}:
-        """Business logic with validation"""
+    async def custom_action(self, data: Create{Model}) -> {Model}Response:
+        """Business logic and Data Access combined"""
         # 1. Validate business rules
         if not self._validate_business_rules(data):
             raise ValidationError("Business rule violation")
 
-        # 2. Process data
-        processed_data = self._process_data(data)
+        # 2. Database Action via Beanie directly
+        doc = self.model(**data.model_dump())
+        await doc.insert()
+        return self._to_response(doc)
 
-        # 3. Call repository
-        result = await self.{feature}_repository.create(processed_data)
-
-        # 4. Return result
-        return result
-
-    def _validate_business_rules(self, data: {Schema}) -> bool:
+    def _validate_business_rules(self, data: Create{Model}) -> bool:
         """Private method for business validation"""
         return True
 
-
-# Dependency providers in same file
-async def get_{feature}_repository() -> {Feature}Repository:
-    """Get {feature} repository instance"""
-    return {Feature}Repository()
-
-
-async def get_{feature}_use_case(
-    repository: {Feature}Repository = Depends(get_{feature}_repository)
-) -> {Feature}UseCase:
-    """Get {feature} use case with injected dependencies"""
-    return {Feature}UseCase({feature}_repository=repository)
-```
-
-### **3. Repository Pattern**
-
-```python
-# modules/{feature}/repository.py
-from apiapp.core.base_repository import BaseRepository
-from .model import {Model}
-
-class {Feature}Repository(BaseRepository[{Model}]):
-    def __init__(self):
-        super().__init__({Model})
-
-    async def find_by_{field}(self, {field}: str) -> {Model} | None:
-        """Custom query methods"""
-        return await self.model.find_one({"{field}": {field}})
-
-    async def find_active(self) -> List[{Model}]:
-        """Find only active records"""
-        return await self.model.find({"status": "active"}).to_list()
+# Dependency providers
+def get_{feature}_use_case() -> {Feature}UseCase:
+    """Get {feature} use case instance"""
+    return {Feature}UseCase()
 ```
 
 ### **4. Router Pattern**
@@ -231,7 +192,8 @@ async def list_{feature}(
 ):
     """List all {feature} items"""
     items = await {feature}_use_case.get_all()
-    return [{Schema}Response.from_entity(item) for item in items]
+    # If returned as objects, manually validate, or let FastAPI handle it if BaseUseCase returns Schemas
+    return items
 
 @router.post("", response_model={Schema}Response, status_code=status.HTTP_201_CREATED)
 async def create_{feature}(
@@ -241,8 +203,7 @@ async def create_{feature}(
 ):
     """Create new {feature}"""
     try:
-        item = await {feature}_use_case.create(data)
-        return {Schema}Response.from_entity(item)
+        return await {feature}_use_case.create(data)
     except ValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -256,7 +217,7 @@ async def get_{feature}(
     item = await {feature}_use_case.get_by_id(item_id)
     if not item:
         raise HTTPException(status_code=404, detail="{Feature} not found")
-    return {Schema}Response.from_entity(item)
+    return item
 ```
 
 ### **5. Cross-Module Dependencies**
@@ -268,15 +229,12 @@ When a use case needs to call another module's use case:
 from fastapi import Depends
 
 from ..user.use_case import get_user_use_case, UserUseCase
-from .repository import AuthRepository
 
 class AuthUseCase:
     def __init__(
         self,
-        auth_repository: AuthRepository,
         user_use_case: UserUseCase
     ):
-        self.auth_repository = auth_repository
         self.user_use_case = user_use_case
 
     async def login(self, credentials: LoginRequest) -> TokenResponse:
@@ -292,17 +250,11 @@ class AuthUseCase:
 
 
 # Dependency providers
-async def get_auth_repository() -> AuthRepository:
-    return AuthRepository()
-
-
-async def get_auth_use_case(
-    auth_repository: AuthRepository = Depends(get_auth_repository),
+def get_auth_use_case(
     user_use_case: UserUseCase = Depends(get_user_use_case)
 ) -> AuthUseCase:
     """Get auth use case with user use case injection"""
     return AuthUseCase(
-        auth_repository=auth_repository,
         user_use_case=user_use_case
     )
 ```
@@ -351,62 +303,26 @@ class {Schema}Response({Schema}Base, BaseSchema):
 This project uses **fastapi_pagination** library with **Beanie pagination** for consistent paginated responses.
 
 ```python
-# modules/{feature}/repository.py
-from fastapi_pagination import Page, Params
-from fastapi_pagination.ext.beanie import paginate
-
-from apiapp.core.base_repository import BaseRepository
-from .model import {Model}
-
-class {Feature}Repository(BaseRepository[{Model}]):
-    def __init__(self):
-        super().__init__({Model})
-
-    async def get_paginated(self, params: Params) -> Page[{Model}]:
-        """Get paginated results"""
-        return await paginate(self.model, params)
-
-    async def find_by_status_paginated(
-        self,
-        status: str,
-        params: Params
-    ) -> Page[{Model}]:
-        """Get paginated results filtered by status"""
-        query = self.model.find({"status": status})
-        return await paginate(query, params)
-```
-
-```python
 # modules/{feature}/use_case.py
 from fastapi import Depends
 from fastapi_pagination import Page, Params
+from fastapi_pagination.ext.beanie import paginate
 
-from .repository import {Feature}Repository
-from .schemas import {Schema}Response
+from apiapp.core.base_use_case import BaseUseCase
+from .model import {Model}
+from .schemas import Create{Model}, Update{Model}, {Model}Response
 
-class {Feature}UseCase:
-    def __init__(self, {feature}_repository: {Feature}Repository):
-        self.{feature}_repository = {feature}_repository
+class {Feature}UseCase(BaseUseCase[{Model}, Create{Model}, Update{Model}, {Model}Response]):
+    model = {Model}
+    response_schema = {Model}Response
 
-    async def get_all_paginated(self, params: Params) -> Page[{Schema}Response]:
-        """Get paginated list of items"""
-        page = await self.{feature}_repository.get_paginated(params)
-
-        # Transform entities to response schemas
-        items = [self._entity_to_response(item) for item in page.items]
-
-        # Return new page with transformed items
-        return Page(
-            items=items,
-            total=page.total,
-            page=page.page,
-            size=page.size,
-            pages=page.pages
-        )
-
-    def _entity_to_response(self, entity) -> {Schema}Response:
-        """Convert entity to response schema"""
-        return {Schema}Response.from_entity(entity)
+    async def get_by_status_paginated(self, status: str) -> Page[{Model}Response]:
+        """Get paginated list filtered by status"""
+        query = self.model.find({"status": status})
+        page = await paginate(query)
+        
+        # BaseUseCase helps transforming paginated models to response schemas
+        return self._page_to_response(page)
 ```
 
 ```python
@@ -428,7 +344,7 @@ async def list_{feature}(
     {feature}_use_case: {Feature}UseCase = Depends(get_{feature}_use_case)
 ):
     """Get paginated list of {feature} items"""
-    return await {feature}_use_case.get_all_paginated(params)
+    return await {feature}_use_case.get_list()
 
 @router.get("/by-status/{status}", response_model=Page[{Schema}Response])
 async def list_{feature}_by_status(
@@ -438,7 +354,7 @@ async def list_{feature}_by_status(
     {feature}_use_case: {Feature}UseCase = Depends(get_{feature}_use_case)
 ):
     """Get paginated list filtered by status"""
-    return await {feature}_use_case.get_by_status_paginated(status, params)
+    return await {feature}_use_case.get_by_status_paginated(status)
 ```
 
 **Pagination Query Parameters:**
@@ -506,12 +422,16 @@ async def delete_item(
 ### **Database Operations**
 
 ```python
-# Always use repository pattern
+# Centralize Beanie logic inside the UseCase
 # ✅ Good
-item = await self.item_repository.find_by_id(item_id)
+item = await self.model.get(PydanticObjectId(item_id))
+await item.delete()
 
-# ❌ Bad
-item = await Item.get(item_id)
+# ❌ Bad (Doing DB operations inside the Router directly)
+@router.delete("/{item_id}")
+async def delete_item(item_id: str):
+    item = await Item.get(item_id)
+    await item.delete()
 ```
 
 ### **Response Models**
@@ -560,13 +480,13 @@ async def create_item():
        return await user_use_case.create_user(data)
    ```
 
-3. **NO cross-module imports between modules**
+3. **NO direct model imports directly to routers**
 
    ```python
-   # ❌ Bad
-   from apiapp.modules.user.repository import UserRepository
+   # ❌ Bad - Import other module's internal directly in router
+   from apiapp.modules.user.model import User
 
-   # ✅ Good - Import use case dependency provider
+   # ✅ Good - Import target module's use case dependency provider into your UseCase
    from ..user.use_case import get_user_use_case, UserUseCase
    ```
 
@@ -587,26 +507,25 @@ The project includes a powerful CLI module generator:
 
 ```bash
 # Interactive mode - will prompt for module name and features
-poetry run velo module
+poetry run forge module create
 
 # Direct creation with module name
-poetry run velo module create {feature_name}
+poetry run forge module create {feature_name}
 
 # Force overwrite existing files
-poetry run velo module create {feature_name} --force
+poetry run forge module create {feature_name} --force
 
 # Dry run to see what files will be created
-poetry run velo module create {feature_name} --dry-run
+poetry run forge module create {feature_name} --dry-run
 
 # List existing modules
-poetry run velo module list
+poetry run forge module list
 ```
 
 The CLI will automatically generate:
 - `modules/{feature}/model.py` - Database model with proper Beanie Document
 - `modules/{feature}/schemas.py` - Request/Response schemas
-- `modules/{feature}/repository.py` - Data access layer with BaseRepository
-- `modules/{feature}/use_case.py` - Business logic with dependency providers
+- `modules/{feature}/use_case.py` - Business logic + Data Access layer
 - `modules/{feature}/router.py` - API endpoints with proper routing
 
 ### **Option 2: Manual Creation**
@@ -615,7 +534,7 @@ If creating manually:
 
 1. **Create module directory**: `modules/{feature}/`
 2. **Add `__init__.py`** to make it a Python package  
-3. **Create all required files**: `model.py`, `schemas.py`, `repository.py`, `use_case.py`, `router.py`
+3. **Create all required files**: `model.py`, `schemas.py`, `use_case.py`, `router.py`
 4. **Follow the exact patterns** shown above
 5. **Export router** with variable name `router`
 6. **Add dependency providers** in `use_case.py` file

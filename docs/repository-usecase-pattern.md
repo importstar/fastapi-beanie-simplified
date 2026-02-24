@@ -1,71 +1,65 @@
-# 📚 Repository และ Use Case Pattern
+# 📚 Use Case Pattern
 
 ## 🎯 ภาพรวม
 
-Repository และ Use Case Pattern เป็นส่วนสำคัญของ Clean Architecture ที่ช่วยแยกชั้นงานให้ชัดเจน ทำให้โค้ดง่ายต่อการทดสอบ บำรุงรักษา และขยาย
+Use Case Pattern เป็นใจความหลักส่วนสำคัญของ Clean Architecture ในโปรเจกต์นี้ ที่ช่วยรวบรวม Business Logic และ Data Access Layer ไว้ด้วยกัน ทำให้โค้ดดูแลง่าย โฟลว์การทำงานกระชับขึ้นและใช้ความสามารถของ Beanie ODM (MongoDB) ระดับ Model ได้เต็มความสามารถ
 
 ## 🏗️ โครงสร้างของ Pattern
 
 ```
 modules/{feature}/
-├── repository.py   # Data Access Layer - จัดการการเข้าถึงข้อมูล
-├── use_case.py     # Business Logic Layer - ประมวลผลตามกฎธุรกิจ
+├── model.py        # Database Document (Beanie) - โครงสร้างตารางต่างๆ
+├── use_case.py     # Business Logic & Data Access Layer - ประมวลผลและต่อ DB
 └── router.py       # Presentation Layer - รับ/ส่งข้อมูลผ่าน API
 ```
 
-## 📊 Repository Pattern
+## 📊 Data Access ผ่าน Model โดยตรง (ODM)
 
-### 🎯 หน้าที่ของ Repository
+### 🎯 เลิกใช้ Repository Pattern
 
-Repository เป็นชั้นที่รับผิดชอบการเข้าถึงข้อมูล (Data Access Layer) โดย:
+เนื่องจาก Beanie ODM นำเสนอ Active Record Pattern ในตัวอยู่แล้ว (ผ่านคลาส `Document`) การมี `Repository` จึงสร้างโค้ดซ้ำซ้อน โปรเจกต์นี้จึงใช้ Beanie เข้าถึงข้อมูลในฝั่ง **Use Case** ได้โดยตรง:
 
-- **แยก Business Logic ออกจาก Data Logic**
-- **สร้าง Interface ที่เป็นมิตรสำหรับ Business Layer**
-- **ซ่อนรายละเอียดของ Database Implementation**
-- **ทำให้ง่ายต่อการ Mock ในการทดสอบ**
+- **รวบรัดโค้ดลง ลดความซ้ำซ้อน**
+- **ได้ Type Safety สูงสุดจาก Beanie Operators ทันที**
+- **ไม่ต้องเขียน boilerplate methods ซ้ำไปมา**
 
-### 🔧 BaseRepository
+### 🔧 ตัวอย่างการใช้งาน BaseUseCase แทนที่ BaseRepository
 
-โปรเจกต์นี้มี `BaseRepository` ที่มีฟังก์ชัน CRUD พื้นฐาน:
+โปรเจกต์นี้มี `BaseUseCase` ที่ห่อหุ้มฟังก์ชัน CRUD พื้นฐานมาให้แล้ว:
 
 ```python
-from apiapp.core.base_repository import BaseRepository
-from typing import Optional, Dict, Any, List
+from apiapp.core.base_use_case import BaseUseCase
+from typing import Optional
 from fastapi_pagination import Page
 from beanie.operators import And, Or
+from .model import User
+from .schemas import CreateUser, UpdateUser, UserResponse
 
-class UserRepository(BaseRepository[User]):
-    def __init__(self):
-        super().__init__(User)
+class UserUseCase(BaseUseCase[User, CreateUser, UpdateUser, UserResponse]):
+    model = User
+    response_schema = UserResponse
     
-    # สืบทอดฟังก์ชันพื้นฐานจาก BaseRepository:
-    # - create(entity)
-    # - find_by_id(id, fetch_links=False)
-    # - find_one(filters, fetch_links=False)
-    # - find_many(filters, skip, limit, fetch_links, sort, as_list)
+    # สืบทอดฟังก์ชันพื้นฐานจาก BaseUseCase ให้ทันที:
+    # - create(data)
+    # - get_by_id(id)
+    # - get_list()
     # - update(id, data)
     # - delete(id)
     
-    # เพิ่มฟังก์ชันเฉพาะ Business
-    async def find_by_email(self, email: str) -> Optional[User]:
-        """หาผู้ใช้จาก email"""
-        return await self.find_one({"email": email})
+    # เพิ่มฟังก์ชันเฉพาะ Business หรือ Custom Queries
+    async def get_by_email(self, email: str) -> Optional[User]:
+        """หาผู้ใช้จาก email: Query ผ่าน Model ตรงๆ ได้เลย"""
+        return await self.model.find_one({"email": email})
     
-    async def find_active_users(self) -> Page[User]:
+    async def get_active_users(self) -> Page[UserResponse]:
         """หาผู้ใช้ที่ active เท่านั้น"""
-        return await self.find_many(
-            User.is_active == True,  # Beanie operators (แนะนำ)
-            sort=[("created_at", -1)]
-        )
-    
-    async def search_users(self, query: str) -> Page[User]:
-        """ค้นหาผู้ใช้จากชื่อหรือ email"""
-        return await self.find_many(
-            Or(
-                User.full_name.regex(query, "i"),
-                User.email.regex(query, "i")
-            )
-        )
+        query = self.model.find(
+            self.model.is_active == True,  # Beanie operators
+        ).sort("-created_at")
+        
+        from fastapi_pagination.ext.beanie import paginate
+        page = await paginate(query)
+        return self._page_to_response(page)
 ```
 
 ### 🔍 Query Patterns
@@ -73,66 +67,61 @@ class UserRepository(BaseRepository[User]):
 #### 1. PyMongo Style (ใช้ได้แต่ไม่แนะนำ)
 
 ```python
-# ❌ PyMongo style - ไม่มี type safety
-users = await repository.find_many({
+# ❌ PyMongo style - ไม่มี type safety บางครั้ง
+users = await self.model.find({
     "age": {"$gt": 18},
     "status": "active"
-})
+}).to_list()
 ```
 
 #### 2. Beanie Operators (แนะนำ) ⭐
 
 ```python
 # ✅ Beanie operators - มี type safety และอ่านง่าย
-from beanie.operators import And, Or, In, Regex
+from beanie.operators import And, Or, In, RegEx
 
 # การกรองแบบง่าย
-adults = await repository.find_many(User.age > 18)
+adults = await self.model.find(self.model.age > 18).to_list()
 
 # การกรองแบบซับซ้อน
-active_adults = await repository.find_many(
-    And(User.age >= 18, User.status == "active")
-)
+active_adults = await self.model.find(
+    And(self.model.age >= 18, self.model.status == "active")
+).to_list()
 
 # การค้นหาด้วย regex
-users = await repository.find_many(
-    User.name.regex("john", "i")  # case-insensitive
-)
+users = await self.model.find(
+    RegEx(self.model.name, "john", "i")  # case-insensitive
+).to_list()
 
 # การกรองหลายค่า
-vip_users = await repository.find_many(
-    User.role.in_(["admin", "premium"])
-)
+vip_users = await self.model.find(
+    In(self.model.role, ["admin", "premium"])
+).to_list()
 
 # การรวมเงื่อนไข
-result = await repository.find_many(
+result = await self.model.find(
     Or(
-        And(User.role == "admin", User.is_active == True),
-        And(User.role == "premium", User.credits > 100)
+        And(self.model.role == "admin", self.model.is_active == True),
+        And(self.model.role == "premium", self.model.credits > 100)
     )
-)
+).to_list()
 ```
 
-### 📄 Pagination และ Sorting
+### 📄 Pagination (Beanie + FastAPI-Pagination)
 
 ```python
-# Pagination แบบเต็ม (ส่งคืน Page object)
-users_page = await repository.find_many(
-    filters=User.is_active == True,
-    skip=0,
-    limit=20,
-    sort=[("created_at", -1), ("name", 1)],
-    fetch_links=True
-)
-# Return: Page[User] พร้อม metadata
+from fastapi_pagination.ext.beanie import paginate
 
-# List แบบธรรมดา (ส่งคืน List เฉยๆ)
-users_list = await repository.find_many(
-    filters=User.is_active == True,
-    limit=100,
-    as_list=True
-)
-# Return: List[User]
+# สร้าง Query ด้วย Beanie Pattern แบบปกติ
+query = self.model.find(
+    self.model.is_active == True,
+).sort("-created_at")
+
+# เข้าสู่การ Paginate (ผลลัพธ์เป็น Page object สำเร็จรูป)
+page = await paginate(query)
+
+# แปลงผลลัพธ์เป็น ResponseSchemaType
+return self._page_to_response(page)
 ```
 
 ## 💼 Use Case Pattern
@@ -154,35 +143,30 @@ from apiapp.core.exceptions import BusinessLogicError
 from typing import Optional, Dict, Any
 from fastapi_pagination import Page
 
-class UserUseCase(BaseUseCase[User, UserRepository]):
-    def __init__(self, repository: UserRepository):
-        super().__init__(repository)
+class UserUseCase(BaseUseCase[User, CreateUser, UpdateUser, UserResponse]):
+    model = User
+    response_schema = UserResponse
     
-    # สืบทอดฟังก์ชันพื้นฐานจาก BaseUseCase:
+    # สืบทอดฟังก์ชันพื้นฐานจาก BaseUseCase ให้ทันที:
     # - create(data)
-    # - get_by_id(id, **kwargs)
-    # - get_all(filters, skip, limit, **kwargs)
+    # - get_by_id(id)
+    # - get_list()
     # - update(id, data)
     # - delete(id)
     
-    async def register_user(self, user_data: Dict[str, Any]) -> User:
+    async def register_user(self, user_data: Dict[str, Any]) -> UserResponse:
         """สมัครสมาชิกใหม่ พร้อม business logic"""
         
         # ตรวจสอบว่า email ซ้ำหรือไม่
-        existing_user = await self.repository.find_by_email(user_data["email"])
+        existing_user = await self.model.find_one({"email": user_data["email"]})
         if existing_user:
             raise BusinessLogicError("Email already registered")
         
         # เข้ารหัสรหัสผ่าน
         user_data["password"] = hash_password(user_data["password"])
         
-        # ตั้งค่าเริ่มต้น
-        user_data["is_active"] = True
-        user_data["role"] = "user"
-        user_data["created_at"] = datetime.utcnow()
-        
-        # บันทึกข้อมูล
-        return await self.create(user_data)
+        # บันทึกข้อมูลผ่านความสามารถ BaseUseCase
+        return await self.create(CreateUser(**user_data))
     
     async def change_password(self, user_id: str, old_password: str, new_password: str) -> bool:
         """เปลี่ยนรหัสผ่าน พร้อมตรวจสอบรหัสเก่า"""
@@ -205,13 +189,24 @@ class UserUseCase(BaseUseCase[User, UserRepository]):
         """ดูโปรไฟล์ผู้ใช้ พร้อม linked documents"""
         return await self.get_by_id(user_id, fetch_links=True)
     
-    async def search_users(self, query: str, page: int = 1, size: int = 20) -> Page[User]:
+    async def search_users(self, query: str, page: int = 1, size: int = 20) -> Page[UserResponse]:
         """ค้นหาผู้ใช้ตามคำค้น"""
         if len(query.strip()) < 2:
             raise BusinessLogicError("Search query must be at least 2 characters")
         
-        skip = (page - 1) * size
-        return await self.repository.search_users(query)
+        from beanie.operators import Or, RegEx
+        from fastapi_pagination.ext.beanie import paginate
+        
+        # ค้นหาด้วย Regex ผ่าน Model ตรงๆ
+        search_query = self.model.find(
+            Or(
+                RegEx(self.model.full_name, query, "i"),
+                RegEx(self.model.email, query, "i")
+            )
+        )
+        
+        page = await paginate(search_query)
+        return self._page_to_response(page)
 ```
 
 ## 🔗 การใช้งานใน Router
@@ -260,14 +255,16 @@ async def get_my_profile(
 
 ### ✅ DO - สิ่งที่ควรทำ
 
-1. **Repository เข้าถึงข้อมูลเท่านั้น**
+1. **ใช้ Data Access ภายใน Use Case ได้เลย**
    ```python
    # ✅ ถูกต้อง
-   async def find_active_users(self) -> Page[User]:
-       return await self.find_many(User.is_active == True)
+   async def find_active_users(self) -> Page[UserResponse]:
+       return await self._page_to_response(
+           await paginate(self.model.find(self.model.is_active == True))
+       )
    ```
 
-2. **Use Case ใส่ Business Logic**
+2. **ใส่ Business Logic เข้ากับ Data Validation**
    ```python
    # ✅ ถูกต้อง
    async def deactivate_user(self, user_id: str) -> bool:
@@ -277,87 +274,72 @@ async def get_my_profile(
        return await self.update(user_id, {"is_active": False})
    ```
 
-3. **ใช้ Beanie Operators สำหรับ Type Safety**
+3. **ใช้ Beanie Operators สำหรับ Type Safety เสมอ**
    ```python
    # ✅ ถูกต้อง
-   return await self.find_many(
-       And(User.age >= 18, User.status == "active")
-   )
+   return await self.model.find(
+       And(self.model.age >= 18, self.model.status == "active")
+   ).to_list()
    ```
 
-4. **ส่งผ่าน Parameters ด้วย kwargs**
+4. **ระวังการใช้งาน `.to_list()`**
    ```python
-   # ✅ ถูกต้อง
-   user = await user_use_case.get_by_id(user_id, fetch_links=True)
+   # ใช้ .to_list() เมื่อผลลัพธ์มีจำนวนน้อยและแน่นอน
+   user_list = await self.model.find_all().to_list()
    ```
 
 ### ❌ DON'T - สิ่งที่ไม่ควรทำ
 
-1. **ไม่ใส่ Business Logic ใน Repository**
+1. **ไม่เขียน Endpoint หนาๆ ใน Router**
    ```python
    # ❌ ผิด
-   async def register_user(self, user_data: Dict) -> User:
-       if user_data["age"] < 18:  # Business logic ใน Repository
+   @router.post("/users")
+   async def register_user(user_data: Dict):
+       if user_data["age"] < 18:  # Business logic ทะลุมาที่ Router!
            raise ValueError("User must be 18+")
-       return await self.create(user_data)
+       user = User(**user_data)
+       await user.insert()
+       return user
    ```
 
-2. **ไม่เข้าถึง Model โดยตรงใน Router**
+2. **ไม่เข้าถึง Model โดยตรงใน Router อย่างเด็ดขาด!**
    ```python
    # ❌ ผิด
    @router.get("/users")
    async def get_users():
-       return await User.find_all().to_list()  # ข้าม Repository และ Use Case
+       # ข้าม Use Case ไปเรียก DB ตรงๆ
+       return await User.find_all().to_list()  
    ```
 
 3. **ไม่ใช้ Raw MongoDB Queries โดยไม่จำเป็น**
    ```python
    # ❌ ผิด - ไม่มี type safety
-   users = await self.find_many({"age": {"$gte": 18}})
+   users = await self.model.find({"age": {"$gte": 18}}).to_list()
    
    # ✅ ถูกต้อง - มี type safety
-   users = await self.find_many(User.age >= 18)
+   users = await self.model.find(self.model.age >= 18).to_list()
    ```
 
 ## 🧪 การทดสอบ
 
-### Repository Testing
-
-```python
-import pytest
-from unittest.mock import AsyncMock
-from apiapp.modules.user.repository import UserRepository
-
-@pytest.fixture
-async def user_repository():
-    return UserRepository()
-
-async def test_find_by_email(user_repository):
-    # Mock การค้นหา
-    user_repository.find_one = AsyncMock(return_value=mock_user)
-    
-    result = await user_repository.find_by_email("test@example.com")
-    
-    assert result == mock_user
-    user_repository.find_one.assert_called_once_with({"email": "test@example.com"})
-```
-
 ### Use Case Testing
 
+การสืบทอด Beanie มาใน Use Case ทำให้จำเป็นต้อง Mock ตัว Database ตรงๆ (ผ่าน mock object)
+
 ```python
 import pytest
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 from apiapp.modules.user.use_case import UserUseCase
 from apiapp.core.exceptions import BusinessLogicError
 
 @pytest.fixture
 def user_use_case():
-    mock_repo = AsyncMock()
-    return UserUseCase(mock_repo)
+    return UserUseCase()
 
-async def test_register_user_duplicate_email(user_use_case):
+@patch('apiapp.modules.user.model.User.find_one')
+async def test_register_user_duplicate_email(mock_find_one, user_use_case):
     # Setup mock
-    user_use_case.repository.find_by_email.return_value = mock_existing_user
+    mock_find_one.return_value = AsyncMock() # Mock ว่าดึงค่า existing_user มาได้
     
     # Test
     with pytest.raises(BusinessLogicError, match="Email already registered"):
@@ -369,22 +351,12 @@ async def test_register_user_duplicate_email(user_use_case):
 ### E-commerce Product Module
 
 ```python
-# repository.py
-class ProductRepository(BaseRepository[Product]):
-    async def find_by_category(self, category: str) -> Page[Product]:
-        return await self.find_many(
-            Product.category == category,
-            sort=[("created_at", -1)]
-        )
-    
-    async def find_in_price_range(self, min_price: float, max_price: float) -> Page[Product]:
-        return await self.find_many(
-            And(Product.price >= min_price, Product.price <= max_price)
-        )
-
 # use_case.py
-class ProductUseCase(BaseUseCase[Product, ProductRepository]):
-    async def create_product(self, product_data: Dict[str, Any]) -> Product:
+class ProductUseCase(BaseUseCase[Product, CreateProduct, UpdateProduct, ProductResponse]):
+    model = Product
+    response_schema = ProductResponse
+    
+    async def create_product(self, product_data: Dict[str, Any]) -> ProductResponse:
         # Business validation
         if product_data["price"] <= 0:
             raise BusinessLogicError("Price must be positive")
@@ -393,9 +365,9 @@ class ProductUseCase(BaseUseCase[Product, ProductRepository]):
         product_data["sku"] = generate_sku(product_data["name"])
         product_data["created_at"] = datetime.utcnow()
         
-        return await self.create(product_data)
+        return await self.create(CreateProduct(**product_data))
     
-    async def apply_discount(self, product_id: str, discount_percent: float) -> Product:
+    async def apply_discount(self, product_id: str, discount_percent: float) -> ProductResponse:
         if discount_percent < 0 or discount_percent > 50:
             raise BusinessLogicError("Discount must be between 0-50%")
         
@@ -404,29 +376,24 @@ class ProductUseCase(BaseUseCase[Product, ProductRepository]):
             raise BusinessLogicError("Product not found")
         
         new_price = product.price * (1 - discount_percent / 100)
-        return await self.update(product_id, {"price": new_price})
+        return await self.update(product_id, UpdateProduct(price=new_price))
+    
+    async def find_in_price_range(self, min_price: float, max_price: float) -> Page[ProductResponse]:
+        query = self.model.find(
+            And(self.model.price >= min_price, self.model.price <= max_price)
+        )
+        page = await paginate(query)
+        return self._page_to_response(page)
 ```
 
 ## 🔧 การปรับแต่งขั้นสูง
 
-### Custom Repository Methods
+### Custom Collection Methods (Aggregation)
 
 ```python
-class OrderRepository(BaseRepository[Order]):
-    async def find_by_status_and_date(
-        self, 
-        status: str, 
-        start_date: datetime, 
-        end_date: datetime
-    ) -> Page[Order]:
-        return await self.find_many(
-            And(
-                Order.status == status,
-                Order.created_at >= start_date,
-                Order.created_at <= end_date
-            ),
-            sort=[("created_at", -1)]
-        )
+class OrderUseCase(BaseUseCase[Order, CreateOrder, UpdateOrder, OrderResponse]):
+    model = Order
+    ...
     
     async def get_revenue_summary(self, start_date: datetime, end_date: datetime) -> Dict:
         # ใช้ MongoDB aggregation สำหรับการคำนวณที่ซับซ้อน
@@ -451,10 +418,10 @@ class OrderRepository(BaseRepository[Order]):
 
 Repository และ Use Case Pattern ช่วยให้:
 
-- **โค้ดแยกชั้นชัดเจน** - แต่ละชั้นมีหน้าที่เฉพาะ
-- **ง่ายต่อการทดสอบ** - Mock ได้ง่าย
-- **ใช้ซ้ำได้** - Business Logic แยกออกจาก Data Access
-- **ปรับปรุงได้ง่าย** - เปลี่ยน Database หรือ Business Rule ได้โดยไม่กระทบส่วนอื่น
-- **Type Safety** - ใช้ Beanie Operators เพื่อความปลอดภัย
+- **โค้ดกระชับขึ้น** - ควบคุม Logic ฝั่งธุรกิจและ Data ในไฟล์เดียวกัน
+- **ง่ายต่อการทดสอบ** - ไม่ต้องสร้าง Mock Service มากมาย
+- **ลด Overhead ตัวระบบ** - ไม่มี Boilerplate Methods ให้รุงรัง
+- **พัฒนาได้ไว** - ลดเวลามาปรับแก้ Type 
+- **Type Safety สูงสุด** - ควบคุมข้อมูลด้วย Beanie และ Pydantic รุ่นล่าสุด
 
-การเรียนรู้ Pattern เหล่านี้จะทำให้คุณเขียน FastAPI ได้อย่างมืออาชีพและมีโครงสร้างที่ดี! 🎯
+การเรียนรู้ Pattern โดยการรวม Use Case เข้ากับ Beanie Database Model จะทำให้โปรเจกต์คุณพัฒนาได้เร็วและเป็นระบบมากขึ้น! 🎯

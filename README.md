@@ -36,11 +36,9 @@ fastapi-beanie-starter/
 │   ├── cmd/                 # Command Line Interface Components
 │   │   └── __init__.py
 │   │
-│   ├── core/                # ชั้นธุรกิจและ Components ที่ใช้ร่วมกัน
 │   │   ├── __init__.py
-│   │   ├── base_repository.py  # Base Repository Pattern
 │   │   ├── base_schemas.py     # Base Pydantic Schemas
-│   │   ├── base_use_case.py    # Base Use Case Pattern
+│   │   ├── base_use_case.py    # Base Use Case Pattern (CRUD & DB)
 │   │   ├── config.py           # การตั้งค่าแอปพลิเคชัน
 │   │   ├── exceptions.py       # Custom Exceptions
 │   │   ├── http_error.py       # HTTP Error Handling
@@ -91,16 +89,14 @@ fastapi-beanie-starter/
 │   ├── main.py              # CLI Entry Point
 │   ├── create_module.py     # Module Generator
 │   ├── README.md            # คู่มือ CLI
-│   └── templates/           # Template Files สำหรับ Module Generation
 │       ├── __init__.py.j2
 │       ├── model.py.j2
-│       ├── repository.py.j2
 │       ├── router.py.j2
 │       ├── schemas.py.j2
 │       └── use_case.py.j2
 │
 ├── docs/                    # Documentation
-│   └── repository-usecase-pattern.md # คู่มือ Repository และ Use Case Pattern
+│   └── usecase-pattern.md   # คู่มือ Use Case Pattern
 │
 └── scripts/                 # Development Scripts (deprecated - ใช้ CLI แทน)
     ├── init-admin           # สร้าง Admin User แรก
@@ -115,15 +111,15 @@ fastapi-beanie-starter/
 
 - **Modules** ขึ้นอยู่กับ **Core** (import จาก `apiapp.core.*`)
 - **Core** ไม่ขึ้นอยู่กับ **Modules**
-- **Infrastructure** implement interfaces ที่กำหนดใน **Core**
 - **Models** อยู่ภายใน module ของตัวเองเพื่อความเป็นระเบียบ
+- **Use Case** จัดการ Business Logic และการเชื่อมต่อ Data Access ในตัว
 
 ### 🔄 Dependency Injection
 
 - ใช้ FastAPI's `Depends()` สำหรับ dependencies ทั้งหมด
-- สร้าง dependency providers ใน `modules/{feature}/dependencies/`
-- Inject use cases, repositories, และ services ผ่าน dependencies
-- ไม่สร้าง object โดยตรงใน routers
+- สร้าง dependency providers ใน `modules/{feature}/use_case.py`
+- Inject use cases และ services ผ่าน dependencies
+- ไม่สร้าง object ของ Use Case/Service โดยตรงใน routers
 
 ### 📦 โครงสร้าง Module
 
@@ -134,8 +130,7 @@ modules/{feature}/
 ├── __init__.py
 ├── model.py        # Database Model (Beanie Document)
 ├── schemas.py      # Pydantic schemas (DTOs)
-├── repository.py   # ชั้นการเข้าถึงข้อมูล
-├── use_case.py     # ชั้น Business Logic
+├── use_case.py     # Business Logic & Data Access
 └── router.py       # API endpoints
 ```
 
@@ -220,11 +215,8 @@ modules/{feature}/
    poetry run forge module create products
    ```
 
-2. **ไฟล์ที่สร้างขึ้นอัตโนมัติ:**
-
    - `modules/products/schemas.py` - กำหนดรูปแบบข้อมูล
-   - `modules/products/repository.py` - จัดการการเข้าถึงฐานข้อมูล
-   - `modules/products/use_case.py` - ใส่ Business Logic
+   - `modules/products/use_case.py` - ใส่ Business Logic และจัดการเข้าถึงฐานข้อมูล
    - `modules/products/router.py` - สร้าง API Endpoints
    - `modules/products/model.py` - กำหนด Database Model
 
@@ -367,7 +359,7 @@ poetry run forge --help
 
    ```python
    async def get_user(user_id: str) -> User | None:
-       return await self.user_repository.find_by_id(user_id)
+       return await self.model.get(PydanticObjectId(user_id))
    ```
 
 3. **ใช้ Dependency Injection**
