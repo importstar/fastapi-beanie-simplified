@@ -19,7 +19,7 @@ async def test_refresh_token_flow(client: AsyncClient):
         # If 400, it might be "User already exists", which is fine.
 
     # Login
-    login_data = {"username": "testuser", "password": "password123", "platform": "web"}
+    login_data = {"username": "testuser", "password": "password123", "strategy": "cookies"}
     response = await client.post("/v1/auth/login", json=login_data)
     assert response.status_code == 200
     tokens = response.json()
@@ -47,7 +47,7 @@ async def test_refresh_token_flow(client: AsyncClient):
     login_data_mobile = {
         "username": "testuser",
         "password": "password123",
-        "platform": "mobile",
+        "strategy": "jwt",
     }
     response = await client.post("/v1/auth/login", json=login_data_mobile)
     assert response.status_code == 200

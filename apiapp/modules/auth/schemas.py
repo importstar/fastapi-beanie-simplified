@@ -7,9 +7,9 @@ from pydantic import BaseModel, Field
 from ...core.base_schemas import BaseSchema
 
 
-class Platform(str, Enum):
-    WEB = "web"
-    MOBILE = "mobile"
+class Strategy(str, Enum):
+    COOKIES = "cookies"
+    JWT = "jwt"
 
 
 class Token(BaseModel):
@@ -29,7 +29,7 @@ class TokenData(BaseModel):
 class SignIn(BaseModel):
     username: str
     password: str
-    platform: Platform = Platform.MOBILE
+    strategy: Strategy = Strategy.JWT
 
 
 class Payload(BaseSchema):

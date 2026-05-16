@@ -22,7 +22,7 @@ from fastapi.security import (
 
 from .use_case import AuthUseCase, get_auth_use_case
 from . import schemas
-from .schemas import Platform
+from .schemas import Strategy
 from ...core.config import settings
 
 
@@ -46,7 +46,7 @@ async def login(
 ) -> schemas.Token:
     """Login and get access + refresh tokens."""
     token = await use_case.authenticate(form_data)
-    if form_data.platform == Platform.WEB:
+    if form_data.strategy == Strategy.COOKIES:
         response.set_cookie(
             key="refresh_token",
             value=token.refresh_token,
