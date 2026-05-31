@@ -79,7 +79,6 @@ fastapi-beanie-starter/
 │       └── user/            # โมดูลจัดการผู้ใช้
 │           ├── __init__.py
 │           ├── model.py     # User Database Model
-│           ├── repository.py # การเข้าถึงข้อมูล User
 │           ├── router.py     # API Endpoints สำหรับ User
 │           ├── schemas.py    # Pydantic Schemas สำหรับ User
 │           └── use_case.py   # Business Logic สำหรับ User
@@ -147,7 +146,7 @@ modules/{feature}/
 1. **Clone โปรเจกต์**
 
    ```bash
-   git clone <repository-url>
+   git clone <project-url>
    cd fastapi-beanie-starter
    ```
 
@@ -223,10 +222,12 @@ modules/{feature}/
    poetry run forge generate products
    ```
 
+2. **ไฟล์ที่สร้างขึ้น**
+
+   - `modules/products/model.py` - กำหนด Beanie Document Model
    - `modules/products/schemas.py` - กำหนดรูปแบบข้อมูล
-   - `modules/products/use_case.py` - ใส่ Business Logic และจัดการเข้าถึงฐานข้อมูล
+   - `modules/products/use_case.py` - ใส่ Business Logic และเข้าถึงข้อมูลผ่าน Beanie Document
    - `modules/products/router.py` - สร้าง API Endpoints
-   - `modules/products/model.py` - กำหนด Database Model
 
 3. **ระบบจะค้นหา Router อัตโนมัติ** - ไม่ต้องไปแก้ไขไฟล์ main.py
 
@@ -431,8 +432,8 @@ docker run -p 9000:9000 fastapi-app
 
 - 📖 อ่านคู่มือเต็ม: [.github/instructions/fastapi.instructions.md](.github/instructions/fastapi.instructions.md)
 - 🛠️ คู่มือ CLI: [cli/README.md](cli/README.md)
-- 🐛 รายงานปัญหา: [GitHub Issues](https://github.com/your-repo/issues)
-- 💬 หารือ: [GitHub Discussions](https://github.com/your-repo/discussions)
+- 🐛 รายงานปัญหา: [GitHub Issues](https://github.com/your-org/fastapi-beanie-starter/issues)
+- 💬 หารือ: [GitHub Discussions](https://github.com/your-org/fastapi-beanie-starter/discussions)
 
 ---
 

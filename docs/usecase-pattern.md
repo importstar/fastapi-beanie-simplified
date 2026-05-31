@@ -2,28 +2,28 @@
 
 ## 🎯 ภาพรวม
 
-Use Case Pattern เป็นใจความหลักส่วนสำคัญของ Clean Architecture ในโปรเจกต์นี้ ที่ช่วยรวบรวม Business Logic และ Data Access Layer ไว้ด้วยกัน ทำให้โค้ดดูแลง่าย โฟลว์การทำงานกระชับขึ้นและใช้ความสามารถของ Beanie ODM (MongoDB) ระดับ Model ได้เต็มความสามารถ
+Use Case Pattern เป็นใจความหลักส่วนสำคัญของ Clean Architecture ในโปรเจกต์นี้ ที่ช่วยรวบรวม Business Logic และการเข้าถึงข้อมูลผ่าน Beanie Document ไว้ด้วยกัน ทำให้โค้ดดูแลง่าย โฟลว์การทำงานกระชับขึ้นและใช้ความสามารถของ Beanie ODM (MongoDB) ระดับ Model ได้เต็มความสามารถ
 
 ## 🏗️ โครงสร้างของ Pattern
 
 ```
 modules/{feature}/
 ├── model.py        # Database Document (Beanie) - โครงสร้างตารางต่างๆ
-├── use_case.py     # Business Logic & Data Access Layer - ประมวลผลและต่อ DB
+├── use_case.py     # Business Logic & Beanie Data Access - ประมวลผลและต่อ DB
 └── router.py       # Presentation Layer - รับ/ส่งข้อมูลผ่าน API
 ```
 
-## 📊 Data Access ผ่าน Model โดยตรง (ODM)
+## 📊 Data Access ผ่าน Beanie Document โดยตรง
 
-### 🎯 เลิกใช้ Repository Pattern
+### 🎯 ใช้ Active Record ของ Beanie
 
-เนื่องจาก Beanie ODM นำเสนอ Active Record Pattern ในตัวอยู่แล้ว (ผ่านคลาส `Document`) การมี `Repository` จึงสร้างโค้ดซ้ำซ้อน โปรเจกต์นี้จึงใช้ Beanie เข้าถึงข้อมูลในฝั่ง **Use Case** ได้โดยตรง:
+Beanie ODM นำเสนอ Active Record Pattern ในตัวผ่านคลาส `Document` โปรเจกต์นี้จึงให้ **Use Case** เข้าถึงข้อมูลผ่าน Beanie Document ได้โดยตรง:
 
 - **รวบรัดโค้ดลง ลดความซ้ำซ้อน**
 - **ได้ Type Safety สูงสุดจาก Beanie Operators ทันที**
 - **ไม่ต้องเขียน boilerplate methods ซ้ำไปมา**
 
-### 🔧 ตัวอย่างการใช้งาน BaseUseCase แทนที่ BaseRepository
+### 🔧 ตัวอย่างการใช้งาน BaseUseCase สำหรับ CRUD พื้นฐาน
 
 โปรเจกต์นี้มี `BaseUseCase` ที่ห่อหุ้มฟังก์ชัน CRUD พื้นฐานมาให้แล้ว:
 
@@ -133,7 +133,7 @@ Use Case เป็นชั้นที่รับผิดชอบ Business L
 - **ประมวลผลตามกฎธุรกิจ**
 - **ควบคุม Transaction และ Data Consistency**
 - **จัดการ Error Handling**
-- **ทำหน้าที่เป็นตัวกลางระหว่าง Router และ Repository**
+- **ทำหน้าที่เป็นตัวกลางระหว่าง Router และ Beanie Document**
 
 ### 🔧 BaseUseCase
 
@@ -416,7 +416,7 @@ class OrderUseCase(BaseUseCase[Order, CreateOrder, UpdateOrder, OrderResponse]):
 
 ## 🚀 สรุป
 
-Repository และ Use Case Pattern ช่วยให้:
+Use Case Pattern ที่ทำงานร่วมกับ Beanie Document โดยตรงช่วยให้:
 
 - **โค้ดกระชับขึ้น** - ควบคุม Logic ฝั่งธุรกิจและ Data ในไฟล์เดียวกัน
 - **ง่ายต่อการทดสอบ** - ไม่ต้องสร้าง Mock Service มากมาย
