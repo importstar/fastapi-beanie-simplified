@@ -3,7 +3,7 @@ import shutil
 from typing import AsyncGenerator, Generator
 from fastapi import FastAPI
 from httpx import AsyncClient, ASGITransport
-from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import AsyncMongoClient
 from asgi_lifespan import LifespanManager
 
 from apiapp.run import create_app
@@ -36,13 +36,13 @@ def settings() -> Settings:
 
 
 @pytest.fixture(scope="session")
-async def db_client(settings: Settings) -> AsyncGenerator[AsyncIOMotorClient, None]:
+async def db_client(settings: Settings) -> AsyncGenerator[AsyncMongoClient, None]:
     """
     Create a MongoDB client for the test session.
     """
-    client = AsyncIOMotorClient(settings.DATABASE_URI)
+    client = AsyncMongoClient(settings.DATABASE_URI)
     yield client
-    client.close()
+    await client.close()
 
 
 @pytest.fixture(scope="session")
@@ -68,7 +68,7 @@ async def client(app: FastAPI) -> AsyncGenerator[AsyncClient, None]:
 
 
 @pytest.fixture(scope="function", autouse=True)
-async def clean_db(settings: Settings, db_client: AsyncIOMotorClient):
+async def clean_db(settings: Settings, db_client: AsyncMongoClient):
     """
     Clean the database before each test function.
     This ensures a fresh state for every test.

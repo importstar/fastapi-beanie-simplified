@@ -2,7 +2,7 @@ import importlib
 import pkgutil
 from typing import Sequence, Type, TypeVar
 from inspect import getmembers, isclass
-import motor.motor_asyncio
+from pymongo import AsyncMongoClient
 import beanie
 from loguru import logger
 
@@ -22,9 +22,9 @@ class BeanieClient:
             self.settings = settings
             logger.info(f"Connecting to MongoDB: {settings.DATABASE_URI}")
 
-            # Create motor client
-            self.client = motor.motor_asyncio.AsyncIOMotorClient(
-                settings.DATABASE_URI, connect=True
+            # Create pymongo async client
+            self.client = AsyncMongoClient(
+                settings.DATABASE_URI
             )
 
             # Get database
@@ -110,7 +110,7 @@ class BeanieClient:
     async def close(self):
         """Close MongoDB connection"""
         if self.client:
-            self.client.close()
+            await self.client.close()
             logger.info("MongoDB connection closed")
 
     async def ping(self) -> bool:
